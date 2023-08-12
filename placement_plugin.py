@@ -7,6 +7,8 @@ import time
 import traceback
 from pathlib import Path
 from .interface.DlgKLEP import DlgKLEP
+from kle-py.damsenviet.kle import Keyboard
+
 
 import pcbnew
 import wx
