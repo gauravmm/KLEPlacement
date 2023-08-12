@@ -106,5 +106,12 @@ class DlgKLEP_Base(wx.Dialog):
 
         self.Centre(wx.BOTH)
 
+        # Connect Events
+        self.m_sdbSizer1Apply.Bind(wx.EVT_BUTTON, self.apply)
+
     def __del__(self):
         pass
+
+    # Virtual event handlers, override them in your derived class
+    def apply(self, event):
+        event.Skip()

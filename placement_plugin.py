@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import pprint
@@ -9,7 +10,7 @@ from pathlib import Path
 from .interface.DlgKLEP import DlgKLEP
 from damsenviet.kle import Keyboard
 
-
+import hjson
 import pcbnew
 import wx
 
@@ -69,6 +70,41 @@ def RunActual(wx_frame: wx.Window, board: pcbnew.BOARD):
         logger.debug(f"KLE text: {kle_text}")
 
         # Parse the KLE text:
-        kbrd = Keyboard.from_json(kle_text)
-        for key in kbrd.keys:
-            logger.debug(f"Key: {key}")
+        kbrd = Keyboard.from_json(hjson.loads(f"[{kle_text}]"))
+        # Sort the keys by column-major order:
+        template_keys = sorted(kbrd.keys, key=lambda x: x.x * 1000 + x.y)
+        items = sorted(
+            items, key=lambda x: x.GetPosition().x * 1000 + x.GetPosition().y
+        )
+
+        # Check that the number of keys matches the number of footprints:
+        if len(template_keys) != len(items):
+            logger.error(
+                f"Number of keys ({len(template_keys)}) does not match number of footprints ({len(items)})."
+            )
+            if (
+                wx.MessageBox(
+                    f"Number of keys ({len(template_keys)}) does not match number of footprints ({len(items)}). Continue anyway?",
+                    "Error",
+                    wx.YES_NO | wx.CANCEL | wx.ICON_ERROR,
+                )
+                != wx.YES
+            ):
+                return
+
+        # Find the top-left position of all keys:
+        min_x = min(item.GetX() for item in items)
+        min_y = min(item.GetY() for item in items)
+
+        for key, item in zip(template_keys, items):
+            x = int(pcbnew.FromMM(key.x * key_U))
+            y = int(pcbnew.FromMM(key.y * key_U))
+            item.SetPosition(pcbnew.VECTOR2I(x + min_x, y + min_y))
+            item.SetOrientationDegrees(key.rotation_angle)
+
+            label = key.labels[0].text
+
+            logger.info(
+                f"Placed {item.GetReference()} at ({x}, {y}; {key.rotation_angle}) for key {label}."
+            )
+            logger.debug(key.__dict__)
