@@ -9,7 +9,7 @@ from .DlgKLEP_Base import DlgKLEP_Base
 logger = logging.getLogger("hierpcb")
 
 
-class DlgHPCBRun(DlgKLEP_Base):
+class DlgKLEP(DlgKLEP_Base):
     def __init__(self, parent: wx.Window, prefixes: List[str]):
         # Set up the user interface from the designer.
         super().__init__(parent)

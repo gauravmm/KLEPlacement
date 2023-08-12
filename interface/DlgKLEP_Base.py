@@ -45,7 +45,12 @@ class DlgKLEP_Base(wx.Dialog):
         bSizerMain.Add(self.m_staticText2, 0, wx.ALL, 5)
 
         self.txtKLEJson = wx.TextCtrl(
-            self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0
+            self,
+            wx.ID_ANY,
+            wx.EmptyString,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.TE_MULTILINE,
         )
         self.txtKLEJson.SetMinSize(wx.Size(-1, 300))
 

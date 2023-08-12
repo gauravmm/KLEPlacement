@@ -7,15 +7,17 @@ import time
 import traceback
 from pathlib import Path
 from .interface.DlgKLEP import DlgKLEP
-from kle-py.damsenviet.kle import Keyboard
+from damsenviet.kle import Keyboard
 
 
 import pcbnew
 import wx
 
 
-logger = logging.getLogger("hierpcb")
+logger = logging.getLogger("kleplacement")
 logger.setLevel(logging.DEBUG)
+
+key_U = 19.05  # The size of 1U in mm
 
 
 class KLEPlacementPlugin(pcbnew.ActionPlugin):
@@ -56,7 +58,7 @@ def RunActual(wx_frame: wx.Window, board: pcbnew.BOARD):
         return x.GetReference().rstrip(string.digits)
 
     options = sorted(set(prefixof(x) for x in board.GetFootprints()))
-    dlg = DlgKLEP(options)
+    dlg = DlgKLEP(wx_frame, options)
     if dlg.ShowModal() == wx.ID_OK:
         logger.info("OK")
         prefix: str = options[dlg.choicePrefix.GetSelection()]
@@ -67,3 +69,6 @@ def RunActual(wx_frame: wx.Window, board: pcbnew.BOARD):
         logger.debug(f"KLE text: {kle_text}")
 
         # Parse the KLE text:
+        kbrd = Keyboard.from_json(kle_text)
+        for key in kbrd.keys:
+            logger.debug(f"Key: {key}")
