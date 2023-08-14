@@ -7,13 +7,16 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from .interface.DlgKLEP import DlgKLEP
-from damsenviet.kle import Keyboard
+from typing import List
 
-import hjson
 import pcbnew
 import wx
 
+from KLEPlacement.simplekleparser import KeySpec
+
+from .cfgman import ConfigMan
+from .interface.DlgKLEP import DlgKLEP
+from .simplekleparser import parse_kle
 
 logger = logging.getLogger("kleplacement")
 logger.setLevel(logging.DEBUG)
@@ -51,15 +54,16 @@ class KLEPlacementPlugin(pcbnew.ActionPlugin):
             f"Plugin v{self.version} running on KiCad {pcbnew.GetBuildVersion()} and Python {sys.version} on {sys.platform}."
         )
 
-        RunActual(wx_frame, board)
+        with ConfigMan(Path(board.GetFileName() + ".klep.json")) as cfg:
+            RunActual(cfg, wx_frame, board)
 
 
-def RunActual(wx_frame: wx.Window, board: pcbnew.BOARD):
+def RunActual(cfg: ConfigMan, wx_frame: wx.Window, board: pcbnew.BOARD):
     def prefixof(x: pcbnew.FOOTPRINT) -> str:
         return x.GetReference().rstrip(string.digits)
 
     options = sorted(set(prefixof(x) for x in board.GetFootprints()))
-    dlg = DlgKLEP(wx_frame, options)
+    dlg = DlgKLEP(cfg, wx_frame, options)
     if dlg.ShowModal() == wx.ID_OK:
         logger.info("OK")
         prefix: str = options[dlg.choicePrefix.GetSelection()]
@@ -70,21 +74,21 @@ def RunActual(wx_frame: wx.Window, board: pcbnew.BOARD):
         logger.debug(f"KLE text: {kle_text}")
 
         # Parse the KLE text:
-        kbrd = Keyboard.from_json(hjson.loads(f"[{kle_text}]"))
+        kbrd: List[KeySpec] = parse_kle(kle_text)
         # Sort the keys by column-major order:
-        template_keys = sorted(kbrd.keys, key=lambda x: x.x * 1000 + x.y)
+        kbrd = sorted(kbrd, key=lambda x: x.x * 1000 + x.y)
         items = sorted(
             items, key=lambda x: x.GetPosition().x * 1000 + x.GetPosition().y
         )
 
         # Check that the number of keys matches the number of footprints:
-        if len(template_keys) != len(items):
+        if len(kbrd) != len(items):
             logger.error(
-                f"Number of keys ({len(template_keys)}) does not match number of footprints ({len(items)})."
+                f"Number of keys ({len(kbrd)}) does not match number of footprints ({len(items)})."
             )
             if (
                 wx.MessageBox(
-                    f"Number of keys ({len(template_keys)}) does not match number of footprints ({len(items)}). Continue anyway?",
+                    f"Number of keys ({len(kbrd)}) does not match number of footprints ({len(items)}). Continue anyway?",
                     "Error",
                     wx.YES_NO | wx.CANCEL | wx.ICON_ERROR,
                 )
@@ -96,15 +100,13 @@ def RunActual(wx_frame: wx.Window, board: pcbnew.BOARD):
         min_x = min(item.GetX() for item in items)
         min_y = min(item.GetY() for item in items)
 
-        for key, item in zip(template_keys, items):
+        for key, item in zip(kbrd, items):
             x = int(pcbnew.FromMM(key.x * key_U))
             y = int(pcbnew.FromMM(key.y * key_U))
-            item.SetPosition(pcbnew.VECTOR2I(x + min_x, y + min_y))
-            item.SetOrientationDegrees(key.rotation_angle)
-
-            label = key.labels[0].text
+            item.SetPosition(pcbnew.VECTOR2I(min_x + x, min_y + y))
+            item.SetOrientationDegrees(key.r)
 
             logger.info(
-                f"Placed {item.GetReference()} at ({x}, {y}; {key.rotation_angle}) for key {label}."
+                f"Placed {item.GetReference()} at ({x}, {y}; {key.r}) for key `{key.label}`."
             )
             logger.debug(key.__dict__)
