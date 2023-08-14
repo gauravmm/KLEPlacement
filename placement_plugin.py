@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 import logging
 import os
@@ -7,7 +8,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
-from typing import List
+from typing import Callable, Dict, List, Tuple
 
 import pcbnew
 import wx
@@ -99,14 +100,78 @@ def RunActual(cfg: ConfigMan, wx_frame: wx.Window, board: pcbnew.BOARD):
         # Find the top-left position of all keys:
         min_x = min(item.GetX() for item in items)
         min_y = min(item.GetY() for item in items)
+        # Find the same limit in virtual key-space:
+        # We need this to offer the don't-move-correctly-placed-footprints option.
+        min_key_x = min(key.x for key in kbrd)
+        min_key_y = min(key.y for key in kbrd)
 
-        for key, item in zip(kbrd, items):
-            x = int(pcbnew.FromMM(key.x * key_U))
-            y = int(pcbnew.FromMM(key.y * key_U))
-            item.SetPosition(pcbnew.VECTOR2I(min_x + x, min_y + y))
+        def get_key_coords(key: KeySpec) -> (int, int):
+            x = min_x + int(pcbnew.FromMM((key.x - min_key_x) * key_U))
+            y = min_y + int(pcbnew.FromMM((key.y - min_key_y) * key_U))
+            return x, y
+
+        matched = correct_keys(items, kbrd, get_key_coords)
+
+        for key, item in matched.items():
+            x, y = get_key_coords(key)
+            item.SetPosition(pcbnew.VECTOR2I(x, y))
             item.SetOrientationDegrees(key.r)
 
             logger.info(
                 f"Placed {item.GetReference()} at ({x}, {y}; {key.r}) for key `{key.label}`."
             )
-            logger.debug(key.__dict__)
+
+
+def correct_keys(
+    items: List[pcbnew.FOOTPRINT],
+    keys: List[KeySpec],
+    get_key_coords: Callable[[KeySpec], Tuple[int, int]],
+) -> Dict[KeySpec, pcbnew.FOOTPRINT]:
+    # Find keys and footprints that are already placed correctly:
+    # We can't rely on sorting by position because the user might have moved
+    # some of them.
+    BIN_SIZE = 100
+    ROT_BIN_SIZE = 2
+    bins: Dict[Tuple[int, int, int], List[pcbnew.FOOTPRINT]] = defaultdict(list)
+    for item in items:
+        # We need to round the position to the nearest BIN_SIZE because
+        # of imprecision in the floating-point math we do.
+        bins[
+            (
+                int(item.GetPosition().x // BIN_SIZE),
+                int(item.GetPosition().y // BIN_SIZE),
+                int(item.GetOrientationDegrees() // ROT_BIN_SIZE),
+            )
+        ].append(item)
+
+    # Now we can check for overlaps:
+    rv: Dict[KeySpec, pcbnew.FOOTPRINT] = {}
+    unmatched_keys = []
+    for key in keys:
+        x, y = get_key_coords(key)
+        candidates = bins[
+            (int(x // BIN_SIZE), int(y // BIN_SIZE), int(key.r // ROT_BIN_SIZE))
+        ]
+
+        if len(candidates) > 0:
+            # We found a candidate!
+            item = candidates.pop()
+            rv[key] = item
+            logger.info(
+                f"Matched {item.GetReference()} at ({x}, {y}; {key.r}) for key `{key.label}`."
+            )
+        else:
+            # No candidate found.
+            unmatched_keys.append(key)
+
+    # Match up the remaining keys and footprints. Keep the original key order,
+    # but sort the footprints by position.
+    # Begin by flattening the remaining footprints into a list:
+    remaining_items = sorted(
+        (item for sublist in bins.values() for item in sublist),
+        key=lambda x: x.GetPosition().x * 1000 + x.GetPosition().y,
+    )
+    for key, item in zip(unmatched_keys, remaining_items):
+        rv[key] = item
+
+    return rv
