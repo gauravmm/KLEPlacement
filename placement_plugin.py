@@ -115,7 +115,7 @@ def RunActual(cfg: ConfigMan, wx_frame: wx.Window, board: pcbnew.BOARD):
         for key, item in matched.items():
             x, y = get_key_coords(key)
             item.SetPosition(pcbnew.VECTOR2I(x, y))
-            item.SetOrientationDegrees(key.r)
+            item.SetOrientationDegrees(key.r + 180)
 
             logger.info(
                 f"Placed {item.GetReference()} at ({x}, {y}; {key.r}) for key `{key.label}`."
@@ -130,28 +130,25 @@ def correct_keys(
     # Find keys and footprints that are already placed correctly:
     # We can't rely on sorting by position because the user might have moved
     # some of them.
-    BIN_SIZE = 100
-    ROT_BIN_SIZE = 2
+    BIN_SIZE = int(1e4)
     bins: Dict[Tuple[int, int, int], List[pcbnew.FOOTPRINT]] = defaultdict(list)
     for item in items:
         # We need to round the position to the nearest BIN_SIZE because
         # of imprecision in the floating-point math we do.
-        bins[
-            (
-                int(item.GetPosition().x // BIN_SIZE),
-                int(item.GetPosition().y // BIN_SIZE),
-                int(item.GetOrientationDegrees() // ROT_BIN_SIZE),
-            )
-        ].append(item)
+        binkey = (
+            int(item.GetPosition().x // BIN_SIZE),
+            int(item.GetPosition().y // BIN_SIZE),
+        )
+        bins[binkey].append(item)
+        logger.debug(f"Footprint {item.GetReference()} in {binkey}")
 
     # Now we can check for overlaps:
     rv: Dict[KeySpec, pcbnew.FOOTPRINT] = {}
     unmatched_keys = []
     for key in keys:
         x, y = get_key_coords(key)
-        candidates = bins[
-            (int(x // BIN_SIZE), int(y // BIN_SIZE), int(key.r // ROT_BIN_SIZE))
-        ]
+        binkey = (int(x // BIN_SIZE), int(y // BIN_SIZE))
+        candidates = bins[binkey]
 
         if len(candidates) > 0:
             # We found a candidate!
@@ -161,6 +158,7 @@ def correct_keys(
                 f"Matched {item.GetReference()} at ({x}, {y}; {key.r}) for key `{key.label}`."
             )
         else:
+            logger.debug(f"Cannot find key at {binkey}")
             # No candidate found.
             unmatched_keys.append(key)
 
@@ -169,9 +167,10 @@ def correct_keys(
     # Begin by flattening the remaining footprints into a list:
     remaining_items = sorted(
         (item for sublist in bins.values() for item in sublist),
-        key=lambda x: x.GetPosition().x * 1000 + x.GetPosition().y,
+        key=lambda x: x.GetPosition().y * 1e6 + x.GetPosition().x,
     )
-    for key, item in zip(unmatched_keys, remaining_items):
-        rv[key] = item
+    return dict(zip(unmatched_keys, remaining_items))
 
-    return rv
+    # for key, item in zip(unmatched_keys, remaining_items):
+    #     rv[key] = item
+    # return rv
