@@ -1,4 +1,6 @@
-# KLEPlacement
+# ~KLEPlacement~
+
+## End of Life, go to [hansfbaier](https://github.com/hansfbaier/KLEPlacement/) instead.
 
 Kicad plugin to place elements using unmodified Keyboard-Layout-Editor data. Requires no additional libraries.
 
