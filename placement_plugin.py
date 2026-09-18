@@ -13,7 +13,7 @@ from typing import Callable, Dict, List, Tuple
 import pcbnew
 import wx
 
-from KLEPlacement.simplekleparser import KeySpec
+from .simplekleparser import KeySpec
 
 from .cfgman import ConfigMan
 from .interface.DlgKLEP import DlgKLEP
@@ -34,7 +34,7 @@ class KLEPlacementPlugin(pcbnew.ActionPlugin):
         self.name = "KLE Placement"
         self.category = "Layout"
         self.description = "Place footprints according to a KLE layout. Paste in your unmodified KLE plugin and hit the run button!"
-        self.icon_file_name = str(Path(__file__).parent / "place_icon.png")
+        self.icon_file_name = str(Path(__file__).parent / "keyboard.png")
         self.show_toolbar_button = True
 
     def Run(self):

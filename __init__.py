@@ -1,8 +1,7 @@
 from pathlib import Path
 import sys
 
-with Path("C:\\Users\\User\\Desktop\\kleplace.log").open("w") as f:
-    f.write("Hello World\n")
+with Path("kleplace.log").open("w") as f:
     sys.path.append(str(Path(__file__).absolute().parent / "lib"))
     try:
         from .placement_plugin import KLEPlacementPlugin
